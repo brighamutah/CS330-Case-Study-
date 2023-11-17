@@ -174,5 +174,5 @@ end_time = time.time()
 
 print("Average Wait Time for Passengers (D1):", average_wait_time, "minutes")
 print("Average Profit Time for Drivers (D2):", average_profit_time, "minutes")
-print("Average Total Distance (D3):", average_total_distance, "kilometers")  # Or appropriate unit
+print("Average Total Distance (D3):", average_total_distance, "kilometers") 
 print(f"Runtime (excluding loading data): {end_time - start_time}")

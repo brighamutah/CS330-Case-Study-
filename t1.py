@@ -5,13 +5,15 @@ import heapq
 from datetime import datetime, timedelta
 import time
 import random
+import csv
 
 def load_json(file_path):
     with open(file_path, 'r') as file:
         return json.load(file)
 
-def load_csv(file_path):
-    return pd.read_csv(file_path)
+def load_csv_to_dict(file_path):
+    with open(file_path, mode='r', encoding='utf-8') as file:
+        return list(csv.DictReader(file))
 
 
 def construct_graph(adjacency_list):
@@ -41,6 +43,7 @@ def find_nearest_node(lat1, lon1, node_data):
             nearest_node = node_id
 
     return nearest_node
+
 
 
 def calculate_route_time(start_node, end_node, graph, current_time):

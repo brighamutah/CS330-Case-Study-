@@ -161,3 +161,10 @@ cython_debug/
 adjacency.json
 __MACOSX/._adjacency.json
 edges.csv
+.idea/vcs.xml
+.idea/other.xml
+.idea/modules.xml
+.idea/misc.xml
+.idea/inspectionProfiles/Project_Default.xml
+.idea/inspectionProfiles/profiles_settings.xml
+.idea/CS330-Case-Study-.iml

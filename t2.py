@@ -2,9 +2,8 @@ import json
 import pandas as pd
 import math
 import heapq
-from datetime import datetime, timedelta
+from datetime import datetime
 import time
-import random
 
 def load_json(file_path):
     with open(file_path, 'r') as file:
@@ -68,31 +67,6 @@ def calculate_route_time(start_node, end_node, graph, current_time):
 
     return float('infinity')
 
-def reinsert_driver(drivers, driver, available):
-    prob = 0.01 # Probability that driver is added back to available drivers
-    rand = random.random()
-    # = bool(random.getrandbits(1))
-    if rand > prob: return drivers
-    index = -1
-    times = drivers['Date/Time'].tolist()
-    n = len(drivers)
-    l, r = 0, n-1
-    # using binary search 
-    while l <= r:
-        m = (l+r)//2
-        mid_time = times[m]
-        if mid_time == available:
-            index = m
-            break
-        elif mid_time < available:
-            l = m + 1
-        else:
-            r = m - 1
-            index = m
-
-    driver['Date/Time'] = available
-    drivers = pd.concat([drivers.iloc[:l], pd.DataFrame([driver]), drivers.iloc[l:]]).reset_index(drop=True)
-    return drivers
 
 def match_and_calculate_metrics(drivers, passengers, graph, node_data):
     wait_times = []
@@ -113,7 +87,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, node_data):
 
         # Use the 'Date/Time' field from the driver's data as the current time
         current_time = driver['Date/Time']
-        
+
         # Calculate the time to passenger and time to destination
         time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, current_time)
         time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, current_time)
@@ -121,11 +95,6 @@ def match_and_calculate_metrics(drivers, passengers, graph, node_data):
         # Calculate wait time for the passenger and profit time for the driver
         wait_time = time_to_passenger  # Time from driver's availability to passenger pickup
         profit_time = time_to_destination - time_to_passenger  # Time driving the passenger minus time to reach them
-
-
-        available_time = current_time + timedelta(hours = (time_to_passenger + time_to_destination))
-        # Binary search driver times for time_to_destination to find where to reinsert driver
-        drivers = reinsert_driver(drivers, driver, available_time)
 
         # Append calculated times to the respective lists
         wait_times.append(wait_time)
@@ -136,7 +105,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, node_data):
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
 
     return average_wait_time, average_profit_time
-#%%
+
 adjacency_list = load_json("adjacency.json")
 node_data = load_json("node_data.json")
 drivers_data = load_csv("drivers.csv")
@@ -150,7 +119,6 @@ passengers_data.sort_values(by='Date/Time', inplace=True)
 
 graph = construct_graph(adjacency_list)
 
-#%%
 start_time = time.time()
 average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
 end_time = time.time()
@@ -158,4 +126,3 @@ end_time = time.time()
 print("Average Wait Time for Passengers (D1):", average_wait_time, "minutes")
 print("Average Profit Time for Drivers (D2):", average_profit_time, "minutes")
 print(f"Runtime (excluding loading data): {end_time-start_time}")
-

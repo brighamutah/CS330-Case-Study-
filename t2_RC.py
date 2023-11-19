@@ -45,6 +45,19 @@ def find_nearest_node(lat1, lon1, node_data):
 
     return nearest_node
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371.0
+    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+
+    a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    distance = R * c
+    return distance
+
 def calculate_route_time(start_node, end_node, graph, current_time):
     # Returns time it takes to travel from start to end in hours
     distances = {node: float('infinity') for node in graph}
@@ -93,7 +106,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
-def match_and_calculate_metrics(drivers, passengers, graph):
+def match_and_calculate_metrics(drivers, passengers, graph, nodes):
     wait_times = []
     profit_times = []
 
@@ -101,15 +114,35 @@ def match_and_calculate_metrics(drivers, passengers, graph):
     passengers.sort(key=lambda x: x['Date/Time'])
 
     while drivers and passengers:
-        driver = drivers.pop(0)
         passenger = passengers.pop(0)
-
-        driver_node = driver['Node']
+        passenger_time = passenger['Date/Time']
         passenger_pickup_node = passenger['Source Node']
         passenger_dropoff_node = passenger['Dest Node']
 
-        driver_time = driver['Date/Time']
-        passenger_time = passenger['Date/Time']
+        source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
+
+        # BRUTE FORCE
+        driver = drivers.pop(0)
+        available_drivers = [driver]
+        t = max(driver['Date/Time'], passenger_time)
+
+        i = 1
+        while passenger_time >= t and i < len(drivers):
+            driver = drivers.pop(i)
+            i+=1
+            available_drivers.append(driver)
+
+        min_dist = float('infinity')
+        closest_driver = None
+        for d in available_drivers:
+            d_lat, d_lon = float(d['Source Lat']), float(d['Source Lon'])
+            dist = haversine(source_lat, source_lon, d_lat, d_lon)
+            if dist < min_dist:
+                min_dist = dist
+                closest_driver = d
+
+        driver_node = closest_driver['Node']
+        driver_time = closest_driver['Date/Time']
 
         match_time = max(driver_time, passenger_time)   # datetime object
 
@@ -123,7 +156,7 @@ def match_and_calculate_metrics(drivers, passengers, graph):
         profit_time = time_to_destination - time_to_passenger # in hours
 
         available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
-        drivers = reinsert_driver(drivers, driver, available_time, passenger_dropoff_node)
+        drivers = reinsert_driver(drivers, closest_driver, available_time, passenger_dropoff_node)
 
         wait_times.append(wait_time)
         profit_times.append(profit_time)
@@ -158,7 +191,7 @@ print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f}
 graph = construct_graph(adjacency_list)
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph)
+average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
 end_time = time.time()
 
 print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")

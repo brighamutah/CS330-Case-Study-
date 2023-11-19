@@ -93,7 +93,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
-def match_and_calculate_metrics(drivers, passengers, graph, node_data):
+def match_and_calculate_metrics(drivers, passengers, graph):
     wait_times = []
     profit_times = []
 
@@ -140,7 +140,7 @@ node_data = load_json("node_data.json")
 drivers_data = load_csv("drivers.csv")
 passengers_data = load_csv("passengers.csv")
 end = time.time()
-print(f'Data Load Time: {end - start: .3} seconds')
+print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
 #%%
 start = time.time()
 for d in drivers_data:
@@ -153,7 +153,7 @@ for p in passengers_data:
     p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
     p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
 end = time.time()
-print(f'Finding Nearest Nodes of all Drivers/Passengers: {end-start: .3f} seconds')
+print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
 #%%
 graph = construct_graph(adjacency_list)
 
@@ -163,4 +163,4 @@ end_time = time.time()
 
 print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
 print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
-print(f"Runtime (excluding loading data): {end_time - start_time}")
+print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")

@@ -124,12 +124,12 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
 
         # BRUTE FORCE
-        driver = drivers.pop(0)
+        driver = list(drivers)[0]
         available_drivers = [driver]
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while driver['Date/Time'] <= passenger_time and i < 5:
+        while driver['Date/Time'] <= passenger_time and i < list:
             driver = list(drivers)[i]
             available_drivers.append(driver)
             i+=1

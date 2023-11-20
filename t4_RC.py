@@ -442,8 +442,4 @@ for i, w in enumerate(weights):
         best_weight = w
 print(f'Best weight = {best_weight}')
 print(f'Best wait time = {best_wait_time}')
-#%%
-# condense graph
-# for each node, if distance to neighbor is less than some value, then merge by
-# 1) treating distance to neighbor as 0,
-# 2) connecting all of neighbors of neighbors to current node,
+

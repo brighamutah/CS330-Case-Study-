@@ -109,6 +109,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 def match_and_calculate_metrics(drivers, passengers, graph, nodes):
     wait_times = []
     profit_times = []
+    d1_times = []
 
     drivers.sort(key=lambda x: x['Date/Time'])
     passengers.sort(key=lambda x: x['Date/Time'])
@@ -154,17 +155,20 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
         wait_time = match_wait_hours + time_to_passenger # in hours
         profit_time = time_to_destination - time_to_passenger # in hours
+        d1 = wait_time + time_to_passenger
 
         available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
         drivers = reinsert_driver(drivers, closest_driver, available_time, passenger_dropoff_node)
 
         wait_times.append(wait_time)
         profit_times.append(profit_time)
+        d1_times.append(d1)
 
     average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
+    average_d1_time = sum(d1_times) / len(d1_times) if d1_times else 0
 
-    return average_wait_time, average_profit_time
+    return average_wait_time, average_profit_time, average_d1_time
 
 #%%
 start = time.time()
@@ -191,9 +195,10 @@ print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f}
 graph = construct_graph(adjacency_list)
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
+average_wait_time, average_profit_time, avg_d1 = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
 end_time = time.time()
 
-print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
+print(f"Average Wait Time for Passengers: {average_wait_time} hours")
+print(f'Average D1: {avg_d1} hours')
 print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
 print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")

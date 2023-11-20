@@ -72,7 +72,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
     return float('infinity')
 
 def reinsert_driver(drivers, driver, available, new_loc):
-    prob = 0.9
+    prob = 0.98
     rand = random.random()
     if rand > prob: return drivers
 
@@ -96,6 +96,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 def match_and_calculate_metrics(drivers, passengers, graph):
     wait_times = []
     profit_times = []
+    D1_times = []
 
     drivers.sort(key=lambda x: x['Date/Time'])
     passengers.sort(key=lambda x: x['Date/Time'])
@@ -122,17 +123,19 @@ def match_and_calculate_metrics(drivers, passengers, graph):
 
         wait_time = match_wait_hours + time_to_passenger # in hours
         profit_time = time_to_destination - time_to_passenger # in hours
+        D1 = wait_time + time_to_destination
 
         available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
         drivers = reinsert_driver(drivers, driver, available_time, passenger_dropoff_node)
 
         wait_times.append(wait_time)
         profit_times.append(profit_time)
+        D1_times.append(D1)
 
     average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
-
-    return average_wait_time, average_profit_time
+    average_D1_time = sum(D1_times)/ len(D1_times) if D1_times else 0
+    return average_wait_time, average_profit_time, average_D1_time
 
 #%%
 start = time.time()
@@ -159,9 +162,10 @@ print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f}
 graph = construct_graph(adjacency_list)
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph)
+average_wait_time, average_profit_time, avg_D1 = match_and_calculate_metrics(drivers_data, passengers_data, graph)
 end_time = time.time()
 
-print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
+print(f"Average Wait Time for Passengers: {average_wait_time} hours")
+print(f'Average D1 Time: {avg_D1} hours')
 print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
 print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")

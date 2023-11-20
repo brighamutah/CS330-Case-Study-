@@ -1,3 +1,4 @@
+import copy
 import json
 import csv
 import math
@@ -37,8 +38,51 @@ def find_nearest_node(lat1, lon1, node_data):
     for node_id, coords in node_data.items():
         lat2 = math.radians(float(coords['lat']))
         lon2 = math.radians(float(coords['lon']))
+        if lat1 == lat2 and lon1 == lon2:
+            return node_id
 
-        distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
+        distance = haversine(lat1, lon1, lat2, lon2)
+        if distance < min_distance:
+            min_distance = distance
+            nearest_node = node_id
+
+    return nearest_node
+
+def bs_lat_lon(target, node_list, latlon, nodes):
+    left, right = 0, len(node_list)-1
+    mid = left + (right - left) // 2
+    while left <= right:
+        mid = left + (right - left) // 2
+        if nodes[node_list[mid]][latlon] == target:
+            left = mid
+            break
+        elif nodes[node_list[mid]][latlon] < target:
+            left = mid + 1
+        else:
+            right = mid - 1
+
+    range = len(node_list) * 0.1
+
+    return node_list[int(mid-range//2):int(mid+range//2)]
+
+def fnn_est(lat1, lon1, n_lat, n_lon, node_data):
+    nearest_node = None
+    min_distance = float('inf')
+
+    lat1 = math.radians(lat1)
+    lon1 = math.radians(lon1)
+    # Nodes of interest
+    noi = list(set(bs_lat_lon(lat1, n_lat, 'lat', node_data) + bs_lat_lon(lon1, n_lon, 'lon', node_data)))
+
+    for node_id in noi:
+        lat2 = math.radians(float(node_data[node_id]['lat']))
+        lon2 = math.radians(float(node_data[node_id]['lon']))
+        if lat1 == lat2 and lon1 == lon2: return node_id
+
+        distance = haversine(lat1, lon1, lat2, lon2) # meters
+        if distance < 0.2: # terminate early if distance within 0.2 km or 200 m
+            return node_id
+
         if distance < min_distance:
             min_distance = distance
             nearest_node = node_id
@@ -46,6 +90,7 @@ def find_nearest_node(lat1, lon1, node_data):
     return nearest_node
 
 def haversine(lat1, lon1, lat2, lon2):
+    # DISTANCE IN METERS
     R = 6371.0
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
 
@@ -104,6 +149,7 @@ def route_time_a_star(start_node, end_node, graph, current_time, nodes, h_weight
         curr_lat, curr_lon = float(nodes[current_node]['lat']), float(nodes[current_node]['lon'])
 
         for neighbor, attributes_list in graph[current_node].items():
+            if neighbor not in nodes.keys(): continue
             n_lat, n_lon = float(nodes[neighbor]['lat']), float(nodes[neighbor]['lon'])
             for attributes in attributes_list:
                 if attributes['day_type'] == day_type and attributes['hour'] == current_hour:
@@ -115,7 +161,35 @@ def route_time_a_star(start_node, end_node, graph, current_time, nodes, h_weight
 
     return float('infinity')
 
+def a_star_est(start_node, end_node, graph, current_time, nodes, h_weight):
+    # Returns time it takes to travel from start to end in hours
+    distances = {node: float('infinity') for node in graph}
+    distances[start_node] = 0
+    pq = [(0, start_node)]
 
+    current_hour = current_time.hour
+    day_type = 'weekday' if current_time.weekday() < 5 else 'weekend'
+
+    while pq:
+        current_distance, current_node = heapq.heappop(pq)
+
+        if current_node == end_node:
+            return distances[end_node]
+
+        curr_lat, curr_lon = float(nodes[current_node]['lat']), float(nodes[current_node]['lon'])
+
+        for neighbor, attributes_list in graph[current_node].items():
+            if neighbor not in nodes.keys(): continue
+            n_lat, n_lon = float(nodes[neighbor]['lat']), float(nodes[neighbor]['lon'])
+            for attributes in attributes_list:
+                if attributes['day_type'] == day_type and attributes['hour'] == current_hour:
+                    distance = current_distance + attributes['time'] + haversine(curr_lat, curr_lon, n_lat, n_lon)*h_weight
+                    if distance < distances[neighbor]:
+                        distances[neighbor] = distance
+                        heapq.heappush(pq, (distance, neighbor))
+                    break
+
+    return 100*haversine(nodes[start_node]['lat'], nodes[start_node]['lon'], nodes[end_node]['lat'], nodes[end_node]['lon'])
 def reinsert_driver(drivers, driver, available, new_loc):
     prob = 0.9
     rand = random.random()
@@ -148,6 +222,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes, h_weight):
     passengers.sort(key=lambda x: x['Date/Time'])
 
     while drivers and passengers:
+        print(f'Remaining Passengers = {len(passengers)}')
         passenger = passengers.pop(0)
         passenger_time = passenger['Date/Time']
         passenger_pickup_node = passenger['Source Node']
@@ -159,7 +234,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes, h_weight):
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while passenger_time >= t:
+        while passenger_time >= t and i < 5: # get max 5 earliest available drivers
             driver = drivers.pop(i)
             i+=1
             available_drivers.append(driver)
@@ -200,8 +275,90 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes, h_weight):
     return average_wait_time, average_profit_time, average_trip_time
 
 #%%
+start = time.time()
+adjacency_list = load_json("adjacency.json")
+node_data = load_json("node_data.json")
+drivers_data = load_csv("drivers.csv")
+passengers_data = load_csv("passengers.csv")
+end = time.time()
+print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
+#%%
+# TRUE NEAREST NODE
+start = time.time()
+for d in drivers_data:
+    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
+    d['Node'] = find_nearest_node(dlat, dlon, node_data)
+
+for p in passengers_data:
+    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
+    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
+    p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
+    p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
+end = time.time()
+print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
+#%%
+graph = construct_graph(adjacency_list)
+#%%
+# Preprocessed graph for approximation
+# IDEA 1: shrink node population by 10 randomly (doesn't work bc the path doesn't necessarily exist)
+random.seed(42)
+keys = random.sample(list(node_data.keys()), len(node_data)//5)
+reduced_nodes = {k: node_data[k] for k in keys}
+reduced_graph = {k: graph[k] for k in keys}
+print(len(reduced_nodes))
+#%%
+# ESTIMATED NEAREST NODE
+start = time.time()
+for d in drivers_data:
+    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
+    d['Node Est'] = find_nearest_node(dlat, dlon, reduced_nodes)
+
+for p in passengers_data:
+    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
+    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
+    p['Source Node Est'] = find_nearest_node(pslat, pslon, reduced_nodes)
+    p['Dest Node Est'] = find_nearest_node(pdlat, pdlon, reduced_nodes)
+end = time.time()
+print(f'Finding Estimated Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
+#%%
+start_time = time.time()
+average_wait_time, average_profit_time, average_trip_time = (
+        macm_id1(drivers_data, passengers_data, graph, node_data, 1, reduced_nodes, reduced_graph))
+end_time = time.time()
+print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
+print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
+print(f'Runtime:  {(end_time - start_time) / 60.0} minutes')
+#%%
+#IDEA 2: get range of nodes nearest to target by lat and long, then find nn and terminate when within range
+n_lat = list(node_data.keys())
+n_lon = list(node_data.keys())
+n_lat.sort(key=lambda x: node_data[x]['lat']) # NODE IDs of nodes sorted by lat
+n_lon.sort(key=lambda x: node_data[x]['lon']) # NODE IDs of nodes sorted by lon
+#%%
+start = time.time()
+for d in drivers_data:
+    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
+    d['Node Est'] = fnn_est(dlat, dlon, n_lat, n_lon, node_data)
+
+for p in passengers_data:
+    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
+    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
+    p['Source Node Est'] = fnn_est(pslat, pslon, n_lat, n_lon, node_data)
+    p['Dest Node Est'] = fnn_est(pdlat, pdlon, n_lat, n_lon, node_data)
+end = time.time()
+print(f'Finding Estimated Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
+#%%
+start_time = time.time()
+average_wait_time, average_profit_time, _ = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data,10)
+end_time = time.time()
+
+print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
+print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
+print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")
+#%%
+#%%
 #match and calculate metrics for idea 1
-def macm_id1(drivers, passengers, graph, nodes, h_weight, nodes_r):
+def macm_id1(drivers, passengers, graph, nodes, h_weight, nodes_r, g_r):
     # USING A* FOR EVERYTHING (part 2)
     wait_times = []
     total_trip_times = []
@@ -221,10 +378,10 @@ def macm_id1(drivers, passengers, graph, nodes, h_weight, nodes_r):
         # BRUTE FORCE
         driver = drivers.pop(0)
         available_drivers = [driver]
-        t = max(driver['Date/Time'], passenger_time)
+        t = max(driver['Date/Time'], passenger_time)        # earliest time both a driver and a passenger are available
 
         i = 1
-        while passenger_time >= t:
+        while passenger_time >= t and i < 5: # can maybe add "AND i < 10
             driver = drivers.pop(i)
             i+=1
             available_drivers.append(driver)
@@ -233,7 +390,7 @@ def macm_id1(drivers, passengers, graph, nodes, h_weight, nodes_r):
         closest_driver = None
         for d in available_drivers:
             d_t, d_node = d['Date/Time'], d['Node Est']
-            ttp = route_time_a_star(d_node, est_pickup, graph, max(d_t, passenger_time), nodes_r, h_weight)
+            ttp = a_star_est(d_node, est_pickup, g_r, max(d_t, passenger_time), nodes_r, h_weight)
             if ttp < min_ttp:
                 min_ttp = ttp
                 closest_driver = d
@@ -264,53 +421,8 @@ def macm_id1(drivers, passengers, graph, nodes, h_weight, nodes_r):
     average_trip_time = sum(total_trip_times)/ len(total_trip_times) if total_trip_times else 0
     return average_wait_time, average_profit_time, average_trip_time
 #%%
-start = time.time()
-adjacency_list = load_json("adjacency.json")
-node_data = load_json("node_data.json")
-drivers_data = load_csv("drivers.csv")
-passengers_data = load_csv("passengers.csv")
-end = time.time()
-print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
-#%%
-# TRUE NEAREST NODE
-start = time.time()
-for d in drivers_data:
-    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
-    d['Node'] = find_nearest_node(dlat, dlon, node_data)
-
-for p in passengers_data:
-    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
-    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
-    p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
-    p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
-end = time.time()
-print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
-#%%
-graph = construct_graph(adjacency_list)
-#%%
-# Preprocessed graph for approximation
-# IDEA 1: shrink node population by 10 randomly
-random.seed(42)
-keys = random.sample(list(node_data.keys()), len(node_data)//10)
-reduced_nodes = {k: node_data[k] for k in keys}
-print(len(reduced_nodes))
-#%%
-# ESTIMATED NEAREST NODE
-start = time.time()
-for d in drivers_data:
-    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
-    d['Node Est'] = find_nearest_node(dlat, dlon, reduced_nodes)
-
-for p in passengers_data:
-    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
-    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
-    p['Source Node Est'] = find_nearest_node(pslat, pslon, reduced_nodes)
-    p['Dest Node Est'] = find_nearest_node(pdlat, pdlon, reduced_nodes)
-end = time.time()
-print(f'Finding Estimated Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
-#%%
 # Determine best weight for heuristic (Haversine distance) in A*
-weights = [0.5, 1, 10, 100]
+weights = [0.001, 0.1, 0.5, 1, 10]
 # Optimizing to minimize passenger wait time
 best_weight = -1
 best_wait_time = float('infinity')
@@ -318,7 +430,7 @@ best_wait_time = float('infinity')
 for i, w in enumerate(weights):
     start_time = time.time()
     average_wait_time, average_profit_time, average_trip_time = (
-        match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data, w))
+        macm_id1(drivers_data, passengers_data, graph, node_data, w, reduced_nodes, reduced_graph))
     end_time = time.time()
     print(f'---------------------------------------------------')
     print(f'Weight = {w}')
@@ -331,14 +443,7 @@ for i, w in enumerate(weights):
 print(f'Best weight = {best_weight}')
 print(f'Best wait time = {best_wait_time}')
 #%%
-start_time = time.time()
-average_wait_time, average_profit_time, average_trip_time = macm_id1(drivers_data, passengers_data, graph, node_data, 1)
-end_time = time.time()
-#%%
-start_time = time.time()
-average_wait_time, average_profit_time, average_trip_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data, 1)
-end_time = time.time()
-
-print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
-print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
-print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")
+# condense graph
+# for each node, if distance to neighbor is less than some value, then merge by
+# 1) treating distance to neighbor as 0,
+# 2) connecting all of neighbors of neighbors to current node,

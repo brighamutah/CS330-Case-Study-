@@ -101,6 +101,7 @@ def match_and_calculate_metrics(drivers, passengers, graph):
     passengers.sort(key=lambda x: x['Date/Time'])
 
     while drivers and passengers:
+        print(f'Remaining Passengers = {len(passengers)}')
         driver = drivers.pop(0)
         passenger = passengers.pop(0)
 

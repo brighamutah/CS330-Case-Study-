@@ -106,7 +106,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
-def match_and_calculate_metrics(drivers, passengers, graph, nodes):
+def macm_t1(drivers, passengers, graph, nodes):
     wait_times = []
     profit_times = []
 
@@ -114,7 +114,46 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
     passengers.sort(key=lambda x: x['Date/Time'])
 
     while drivers and passengers:
-        print(f'Remaining Passengers = {len(passengers)}')
+        driver = drivers.pop(0)
+        passenger = passengers.pop(0)
+
+        driver_node = driver['Node']
+        passenger_pickup_node = passenger['Source Node']
+        passenger_dropoff_node = passenger['Dest Node']
+
+        driver_time = driver['Date/Time']
+        passenger_time = passenger['Date/Time']
+
+        match_time = max(driver_time, passenger_time)  # datetime object
+
+        match_wait_time = match_time - passenger_time  # datetime object
+        match_wait_hours = match_wait_time.total_seconds() / 3600.0  # wait time in hours
+
+        time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, match_time)  # in hours
+        time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph,
+                                                   match_time)  # in hours
+
+        wait_time = match_wait_hours + time_to_passenger  # in hours
+        profit_time = time_to_destination - time_to_passenger  # in hours
+
+        available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination))  # datetime object
+        drivers = reinsert_driver(drivers, driver, available_time, passenger_dropoff_node)
+
+        wait_times.append(wait_time)
+        profit_times.append(profit_time)
+
+    average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
+    average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
+
+    return average_wait_time, average_profit_time
+
+def macm_t2(drivers, passengers, graph, nodes):
+    wait_times = []
+    profit_times = []
+    drivers.sort(key=lambda x: x['Date/Time'])
+    passengers.sort(key=lambda x: x['Date/Time'])
+
+    while drivers and passengers:
         passenger = passengers.pop(0)
         passenger_time = passenger['Date/Time']
         passenger_pickup_node = passenger['Source Node']
@@ -128,7 +167,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while passenger_time >= t and i < 5:
+        while passenger_time >= t and i < len(drivers):
             driver = drivers.pop(i)
             i+=1
             available_drivers.append(driver)
@@ -167,34 +206,62 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
     return average_wait_time, average_profit_time
 
-#%%
-start = time.time()
-adjacency_list = load_json("adjacency.json")
-node_data = load_json("node_data.json")
-drivers_data = load_csv("drivers.csv")
-passengers_data = load_csv("passengers.csv")
-end = time.time()
-print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
-#%%
-start = time.time()
-for d in drivers_data:
-    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
-    d['Node'] = find_nearest_node(dlat, dlon, node_data)
+def macm_t3(drivers, passengers, graph, nodes):
+    wait_times = []
+    profit_times = []
 
-for p in passengers_data:
-    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
-    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
-    p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
-    p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
-end = time.time()
-print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
-#%%
-graph = construct_graph(adjacency_list)
-#%%
-start_time = time.time()
-average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
-end_time = time.time()
+    drivers.sort(key=lambda x: x['Date/Time'])
+    passengers.sort(key=lambda x: x['Date/Time'])
 
-print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
-print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
-print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")
+    while drivers and passengers:
+        passenger = passengers.pop(0)
+        passenger_time = passenger['Date/Time']
+        passenger_pickup_node = passenger['Source Node']
+        passenger_dropoff_node = passenger['Dest Node']
+
+        source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
+
+        # BRUTE FORCE
+        driver = drivers.pop(0)
+        available_drivers = [driver]
+        t = max(driver['Date/Time'], passenger_time)
+
+        i = 1
+        while passenger_time >= t and i < len(drivers):
+            driver = drivers.pop(i)
+            i+=1
+            available_drivers.append(driver)
+
+        min_ttp = float('infinity')
+        closest_driver = None
+        for d in available_drivers:
+            d_t, d_node, d_lat, d_lon = d['Date/Time'], d['Node'], d['Source Lat'], d['Source Lon']
+            ttp = calculate_route_time(d_node, passenger_pickup_node, graph, max(d_t, passenger_time))
+            if ttp < min_ttp:
+                min_ttp = ttp
+                closest_driver = d
+
+        driver_node = closest_driver['Node']
+        driver_time = closest_driver['Date/Time']
+
+        match_time = max(driver_time, passenger_time)   # datetime object
+
+        match_wait_time = match_time - passenger_time   # datetime object
+        match_wait_hours = match_wait_time.total_seconds()/3600.0 # wait time in hours
+
+        time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, match_time) # in hours
+        time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, match_time) # in hours
+
+        wait_time = match_wait_hours + time_to_passenger # in hours
+        profit_time = time_to_destination - time_to_passenger # in hours
+
+        available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
+        drivers = reinsert_driver(drivers, closest_driver, available_time, passenger_dropoff_node)
+
+        wait_times.append(wait_time)
+        profit_times.append(profit_time)
+
+    average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
+    average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
+
+    return average_wait_time, average_profit_time

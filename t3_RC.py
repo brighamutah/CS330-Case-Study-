@@ -37,7 +37,7 @@ def find_nearest_node(lat1, lon1, node_data):
     for node_id, coords in node_data.items():
         lat2 = math.radians(float(coords['lat']))
         lon2 = math.radians(float(coords['lon']))
-
+        if lat1 == lat2 and lon1 == lon2: return node_id
         distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
         if distance < min_distance:
             min_distance = distance

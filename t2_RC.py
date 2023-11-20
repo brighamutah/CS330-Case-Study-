@@ -5,6 +5,7 @@ import heapq
 from datetime import datetime, timedelta
 import time
 import random
+import copy
 
 def load_json(file_path):
     with open(file_path, 'r') as file:
@@ -125,24 +126,27 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
         # BRUTE FORCE
         driver = list(drivers)[0]
-        available_drivers = [driver]
+        last_available_driver = 0
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while driver['Date/Time'] <= passenger_time and i < list:
+        while driver['Date/Time'] <= passenger_time and i < len(drivers):
             driver = list(drivers)[i]
-            available_drivers.append(driver)
+            last_available_driver = i
             i+=1
 
         min_dist = float('infinity')
-        closest_driver = None
-        for d in available_drivers:
-            d_lat, d_lon = float(d['Source Lat']), float(d['Source Lon'])
-            dist = haversine(source_lat, source_lon, d_lat, d_lon)
-            if dist < min_dist:
-                min_dist = dist
-                closest_driver = d
+        c_d_i = 0
+        if last_available_driver != 0:
+            for ind in range(last_available_driver):
+                d = list(drivers)[ind]
+                d_lat, d_lon = float(d['Source Lat']), float(d['Source Lon'])
+                dist = haversine(source_lat, source_lon, d_lat, d_lon)
+                if dist < min_dist:
+                    min_dist = dist
+                    c_d_i = ind
 
+        closest_driver = drivers.pop(c_d_i)
         driver_node = closest_driver['Node']
         driver_time = closest_driver['Date/Time']
 
@@ -196,10 +200,11 @@ print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f}
 graph = construct_graph(adjacency_list)
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time, avg_d1 = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
+average_wait_time, average_profit_time, avg_d1 = match_and_calculate_metrics(copy.deepcopy(drivers_data), copy.deepcopy(passengers_data)[:100], graph, node_data)
 end_time = time.time()
 
 print(f"Average Wait Time for Passengers: {average_wait_time} hours")
 print(f'Average D1: {avg_d1} hours')
 print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
 print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")
+

@@ -152,13 +152,14 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
         min_ttp = float('infinity')
         c_d_i = 0
-        for ind in closest_drivers:
-            d = list(drivers)[ind]
-            d_t, d_node, d_lat, d_lon = d['Date/Time'], d['Node'], d['Source Lat'], d['Source Lon']
-            ttp = calculate_route_time(d_node, passenger_pickup_node, graph, max(d_t, passenger_time))
-            if ttp < min_ttp:
-                min_ttp = ttp
-                c_d_i = ind
+        if len(closest_drivers) != 1:
+            for ind in closest_drivers:
+                d = list(drivers)[ind]
+                d_t, d_node, d_lat, d_lon = d['Date/Time'], d['Node'], d['Source Lat'], d['Source Lon']
+                ttp = calculate_route_time(d_node, passenger_pickup_node, graph, max(d_t, passenger_time))
+                if ttp < min_ttp:
+                    min_ttp = ttp
+                    c_d_i = ind
 
         closest_driver = drivers.pop(c_d_i)
         driver_node = closest_driver['Node']

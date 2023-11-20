@@ -85,7 +85,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
     return float('infinity')
 
 def reinsert_driver(drivers, driver, available, new_loc):
-    prob = 0.9
+    prob = 0.95
     rand = random.random()
     if rand > prob: return drivers
 
@@ -129,10 +129,10 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while passenger_time >= t and i < 5:
-            driver = drivers.pop(i)
-            i+=1
+        while driver['Date/Time'] <= passenger_time and i < 5:
+            driver = list(drivers)[i]
             available_drivers.append(driver)
+            i+=1
 
         min_dist = float('infinity')
         closest_driver = None

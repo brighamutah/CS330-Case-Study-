@@ -1,3 +1,4 @@
+import copy
 import json
 import csv
 import math
@@ -56,7 +57,7 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     distance = R * c
-    return distance
+    return abs(distance)
 
 def calculate_route_time(start_node, end_node, graph, current_time):
     # Returns time it takes to travel from start to end in hours
@@ -85,7 +86,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
     return float('infinity')
 
 def reinsert_driver(drivers, driver, available, new_loc):
-    prob = 0.9
+    prob = 0.95
     rand = random.random()
     if rand > prob: return drivers
 
@@ -113,9 +114,16 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
     drivers.sort(key=lambda x: x['Date/Time'])
     passengers.sort(key=lambda x: x['Date/Time'])
-
+    avg_runtime = 0
+    total_n = 0
+    print(drivers)
     while drivers and passengers:
+        start = time.time()
+        print(f'Remaining Passengers = {len(passengers)}')
+        print(f'Remaining Driver = {len(drivers)}')
+        print(f'Est. Remaining Time: {(len(passengers) * avg_runtime)/60.0: .2f} minutes')
         passenger = passengers.pop(0)
+        total_n+=1
         passenger_time = passenger['Date/Time']
         passenger_pickup_node = passenger['Source Node']
         passenger_dropoff_node = passenger['Dest Node']
@@ -123,25 +131,36 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
 
         # BRUTE FORCE
-        driver = drivers.pop(0)
-        available_drivers = [driver]
+        driver = list(drivers)[0]
+        d_lat, d_lon = float(nodes[driver['Node']]['lat']), float(nodes[driver['Node']]['lon'])
+        available_drivers = [(haversine(d_lat, d_lon, source_lat, source_lon), 0)]
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while passenger_time >= t and i < len(drivers):
-            driver = drivers.pop(i)
-            i+=1
-            available_drivers.append(driver)
+        while driver['Date/Time'] <= passenger_time and i < len(drivers):
+            driver = list(drivers)[i]
+            d_lat, d_lon = float(nodes[driver['Node']]['lat']), float(nodes[driver['Node']]['lon'])
+            heapq.heappush(available_drivers, (haversine(d_lat, d_lon, source_lat, source_lon), i))
+            i += 1
+
+        closest_drivers = []
+        j = 0
+        while available_drivers and j < 10:
+            _, index = heapq.heappop(available_drivers)
+            closest_drivers.append(index)
+            j += 1
 
         min_ttp = float('infinity')
-        closest_driver = None
-        for d in available_drivers:
+        c_d_i = 0
+        for ind in closest_drivers:
+            d = list(drivers)[ind]
             d_t, d_node, d_lat, d_lon = d['Date/Time'], d['Node'], d['Source Lat'], d['Source Lon']
             ttp = calculate_route_time(d_node, passenger_pickup_node, graph, max(d_t, passenger_time))
             if ttp < min_ttp:
                 min_ttp = ttp
-                closest_driver = d
+                c_d_i = ind
 
+        closest_driver = drivers.pop(c_d_i)
         driver_node = closest_driver['Node']
         driver_time = closest_driver['Date/Time']
 
@@ -163,6 +182,9 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         wait_times.append(wait_time)
         profit_times.append(profit_time)
         d1_times.append(d1)
+        end = time.time()
+        avg_runtime = avg_runtime*(total_n-1) + (end-start)
+        avg_runtime /= total_n
 
     average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
@@ -195,7 +217,8 @@ print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f}
 graph = construct_graph(adjacency_list)
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time, avg_d1 = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
+average_wait_time, average_profit_time, avg_d1 = (
+    match_and_calculate_metrics(copy.deepcopy(drivers_data), copy.deepcopy(passengers_data), graph, node_data))
 end_time = time.time()
 
 print(f"Average Wait Time for Passengers: {average_wait_time} hours")

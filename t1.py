@@ -72,7 +72,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
     return float('infinity')
 
 def reinsert_driver(drivers, driver, available, new_loc):
-    prob = 0.98
+    prob = 0.95
     rand = random.random()
     if rand > prob: return drivers
 

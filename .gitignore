@@ -168,3 +168,6 @@ edges.csv
 .idea/inspectionProfiles/Project_Default.xml
 .idea/inspectionProfiles/profiles_settings.xml
 .idea/CS330-Case-Study-.iml
+*.png
+*.txt
+data_vis.ipynb

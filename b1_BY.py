@@ -186,25 +186,30 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
-def k_centers_clustering(passengers_data, k):
-    # Simple k-centers clustering implementation using Haversine distance
-    coords = [(float(p['Source Lat']), float(p['Source Lon'])) for p in passengers_data]
-    centers = [coords[0]]  # Start with the first coordinate as the initial center
-    distances = [float('inf')] * len(coords)
+import random
 
-    for _ in range(1, k):
-        max_distance_index = max(range(len(coords)), key=lambda i: distances[i])
-        centers.append(coords[max_distance_index])
+def k_centers_clustering(passengers, k, haversine):
+    # Randomly initialize the cluster centers
+    centers = random.sample(passengers, k)
 
-        for i, coord in enumerate(coords):
-            distances[i] = min(distances[i], haversine(coord, centers[-1]))
+    # Initialize clusters
+    clusters = [[] for _ in range(k)]
 
-    passenger_clusters = [[] for _ in range(k)]
-    for i, coord in enumerate(coords):
-        cluster_index = min(range(k), key=lambda j: haversine(coord, centers[j]))
-        passenger_clusters[cluster_index].append(passengers_data[i])
+    # Assign each passenger to the closest cluster
+    for passenger in passengers:
+        min_distance = float('inf')
+        closest_center = None
 
-    return passenger_clusters
+        for i, center in enumerate(centers):
+            distance = haversine(passenger['Source Lat'], passenger['Source Lon'], center['Source Lat'], center['Source Lon'])
+            if distance < min_distance:
+                min_distance = distance
+                closest_center = i
+
+        clusters[closest_center].append(passenger)
+
+    return clusters
+
 
 def precompute_travel_times(passenger_clusters, graph, nodes, h_weight):
     # Precompute travel times for each batch of passengers

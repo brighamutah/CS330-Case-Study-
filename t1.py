@@ -6,10 +6,12 @@ from datetime import datetime, timedelta
 import time
 import random
 
+# Function to load JSON files
 def load_json(file_path):
     with open(file_path, 'r') as file:
         return json.load(file)
 
+# Changed this function to load in CSV w/o using Pandas
 def load_csv(file_path):
     data = []
     with open(file_path, newline='', encoding='utf-8') as csvfile:
@@ -19,6 +21,7 @@ def load_csv(file_path):
             data.append(row)
     return data
 
+# Function to create graph
 def construct_graph(adjacency_list):
     graph = {}
     for start_node, edges in adjacency_list.items():
@@ -27,6 +30,7 @@ def construct_graph(adjacency_list):
             graph[start_node][end_node] = attributes
     return graph
 
+# Function to find nearest node using Haversine formula
 def find_nearest_node(lat1, lon1, node_data):
     nearest_node = None
     min_distance = float('inf')
@@ -38,13 +42,15 @@ def find_nearest_node(lat1, lon1, node_data):
         lat2 = math.radians(float(coords['lat']))
         lon2 = math.radians(float(coords['lon']))
 
-        distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
+        # haversine distance (in miles)
+        distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1)) # Haversine
         if distance < min_distance:
             min_distance = distance
             nearest_node = node_id
 
     return nearest_node
 
+# Modified Dijkstra's algorithm to calculate shortest path time
 def calculate_route_time(start_node, end_node, graph, current_time):
     # Returns time it takes to travel from start to end in hours
     distances = {node: float('infinity') for node in graph}
@@ -57,7 +63,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
     while pq:
         current_distance, current_node = heapq.heappop(pq)
 
-        if current_node == end_node:
+        if current_node == end_node:        # exit early if end node is visited
             return distances[end_node]
 
         for neighbor, attributes_list in graph[current_node].items():
@@ -71,6 +77,7 @@ def calculate_route_time(start_node, end_node, graph, current_time):
 
     return float('infinity')
 
+# Use binary search to reinsert driver --> use prob of 0.95 for all experiments
 def reinsert_driver(drivers, driver, available, new_loc):
     prob = 0.95
     rand = random.random()
@@ -93,6 +100,7 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
+# Main calculation loop: D1-D3 metrics all computed here
 def match_and_calculate_metrics(drivers, passengers, graph):
     wait_times = []
     profit_times = []
@@ -137,6 +145,7 @@ def match_and_calculate_metrics(drivers, passengers, graph):
     average_D1_time = sum(D1_times)/ len(D1_times) if D1_times else 0
     return average_wait_time, average_profit_time, average_D1_time
 
+# Load data and preprocess
 #%%
 start = time.time()
 adjacency_list = load_json("adjacency.json")
@@ -159,8 +168,10 @@ for p in passengers_data:
 end = time.time()
 print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
 #%%
+# Construct graph
 graph = construct_graph(adjacency_list)
 #%%
+# Run main function and print out values (keep track of how long each process takes)
 start_time = time.time()
 average_wait_time, average_profit_time, avg_D1 = match_and_calculate_metrics(drivers_data, passengers_data, graph)
 end_time = time.time()

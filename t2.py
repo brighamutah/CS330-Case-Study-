@@ -46,6 +46,7 @@ def find_nearest_node(lat1, lon1, node_data):
 
     return nearest_node
 
+# distance for haversine distance (in kilometers)
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371.0
     lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
@@ -124,17 +125,18 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
         source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
 
-        # BRUTE FORCE
+        # BRUTE FORCE check all available drivers
         driver = list(drivers)[0]
         last_available_driver = 0
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while driver['Date/Time'] <= passenger_time and i < len(drivers):
+        while driver['Date/Time'] <= passenger_time and i < len(drivers): # get all available drivers at time of passenger request
             driver = list(drivers)[i]
             last_available_driver = i
             i+=1
 
+        # determine index of minimum straight-line distance driver
         min_dist = float('infinity')
         c_d_i = 0
         if last_available_driver != 0:
@@ -147,6 +149,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
                     c_d_i = ind
 
         closest_driver = drivers.pop(c_d_i)
+        # calculate route time and reinsert driver (same as t1)
         driver_node = closest_driver['Node']
         driver_time = closest_driver['Date/Time']
 

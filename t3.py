@@ -137,7 +137,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
         t = max(driver['Date/Time'], passenger_time)
 
         i = 1
-        while driver['Date/Time'] <= passenger_time and i < len(drivers):
+        while driver['Date/Time'] <= passenger_time and i < len(drivers): # find all available drivers at time of request
             driver = list(drivers)[i]
             d_lat, d_lon = float(nodes[driver['Node']]['lat']), float(nodes[driver['Node']]['lon'])
             heapq.heappush(available_drivers, (haversine(d_lat, d_lon, source_lat, source_lon), i))
@@ -145,14 +145,14 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
 
         closest_drivers = []
         j = 0
-        while available_drivers and j < 10:
+        while available_drivers and j < 10:         # get top 10 closest by straight-line distance
             _, index = heapq.heappop(available_drivers)
             closest_drivers.append(index)
             j += 1
 
         min_ttp = float('infinity')
         c_d_i = 0
-        if len(closest_drivers) != 1:
+        if len(closest_drivers) != 1:       # calculate actual route traversal time for top 10 closest by straight-line
             for ind in closest_drivers:
                 d = list(drivers)[ind]
                 d_t, d_node, d_lat, d_lon = d['Date/Time'], d['Node'], d['Source Lat'], d['Source Lon']
@@ -162,6 +162,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes):
                     c_d_i = ind
 
         closest_driver = drivers.pop(c_d_i)
+        # same as t1 for calculating route time and reinserting
         driver_node = closest_driver['Node']
         driver_time = closest_driver['Date/Time']
 

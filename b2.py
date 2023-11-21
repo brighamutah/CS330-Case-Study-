@@ -197,7 +197,7 @@ def macm_b2(drivers, passengers, graph, nodes, h_weight):
     avg_runtime = 0
     total_n = 0
     T = {}
-    c = 0.15
+    c = 0.15 # weight for number of driver trips
 
     while drivers and passengers:
         start = time.time()
@@ -220,7 +220,7 @@ def macm_b2(drivers, passengers, graph, nodes, h_weight):
             driver = list(drivers)[i]
             d_id = driver["ID"]
             d_lat, d_lon = float(nodes[driver['Node']]['lat']), float(nodes[driver['Node']]['lon'])
-            heapq.heappush(available_drivers, (haversine(d_lat, d_lon, source_lat, source_lon) + c * driver_n_trips[d_id] , i))
+            heapq.heappush(available_drivers, (haversine(d_lat, d_lon, source_lat, source_lon) + c * driver_n_trips[d_id] , i)) # update this to be weighted by # of driver trips
             i += 1
 
         closest_drivers = []

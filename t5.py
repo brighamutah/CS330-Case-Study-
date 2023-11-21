@@ -196,15 +196,16 @@ def reinsert_driver(drivers, driver, available, new_loc):
 
     return drivers
 
+# Helper function to find shortest total distance for passenger_batch/driver pairs
 def calculate_min_cost_assignment(cost_matrix):
-    '''Finding shortest total distance for passenger_batch/driver assignment'''
     def find_zero_in_matrix(matrix):
         for i, row in enumerate(matrix):
             for j, val in enumerate(row):
                 if val == 0:
                     return i, j
         return -1, -1
-
+    
+    # Perform row and column reductions
     # Subtract row minima
     for i in range(len(cost_matrix)):
         row_min = min(cost_matrix[i])
@@ -259,6 +260,7 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes, h_weight = 0)
 
         total_n+=len(passenger_batch)
 
+        # instantiate cost matrix here 
         distance_matrix = [[haversine(float(nodes[passenger['Source Node']]['lat']), 
                                       float(nodes[passenger['Source Node']]['lon']), 
                                       float(nodes[driver['Node']]['lat']), 
@@ -289,8 +291,6 @@ def match_and_calculate_metrics(drivers, passengers, graph, nodes, h_weight = 0)
        
             time_to_passenger = route_time_a_star(driver_node, passenger_pickup_node, graph, match_time, nodes, h_weight) # in hours
             time_to_destination = route_time_a_star(passenger_pickup_node, passenger_dropoff_node, graph, match_time, nodes, h_weight) # in hours
-        # time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, match_time)  # in hours
-        # time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, match_time)  # in hours
 
             wait_time = match_wait_hours + time_to_passenger # in hours
             profit_time = time_to_destination - time_to_passenger # in hours

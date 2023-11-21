@@ -369,8 +369,8 @@ print(f'Finding Estimated Nearest Nodes of all Drivers/Passengers: {(end-start)/
 #%%
 # K-centers clustering and precompute travel times
 k = 4  
-passenger_clusters = k_centers_clustering(passengers_data, k)
-precomputed_times = precompute_travel_times(passenger_clusters, graph, node_data, h_weight)
+passenger_clusters = k_centers_clustering(passengers_data, k, haversine)
+precomputed_times = precompute_travel_times(passenger_clusters, graph, node_data, 1)
 
 
 #weight computation 
@@ -405,26 +405,4 @@ plt.hist(driver_trips)
 plt.xlabel('Number of Trips')
 plt.ylabel('Frequency')
 plt.show()
-# #%%
-# # Determine best weight for heuristic (Haversine distance) in A*
-# weights = [0.001, 0.1, 0.5, 1, 10]
-# # Optimizing to minimize passenger wait time
-# best_weight = -1
-# best_wait_time = float('infinity')
-#
-# for i, w in enumerate(weights):
-#     start_time = time.time()
-#     average_wait_time, average_profit_time, average_trip_time, driver_profit = (
-#         match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data, w))
-#     end_time = time.time()
-#     print(f'---------------------------------------------------')
-#     print(f'Weight = {w}')
-#     print(f"Average Wait Time for Passengers (D1): {average_wait_time} hours")
-#     print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
-#     print(f'Runtime:  {(end_time - start_time) / 60.0} minutes')
-#     if average_wait_time < best_wait_time:
-#         best_wait_time = average_wait_time
-#         best_weight = w
-# print(f'Best weight = {best_weight}')
-# print(f'Best wait time = {best_wait_time}')
-#
+

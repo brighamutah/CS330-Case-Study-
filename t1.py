@@ -1,5 +1,5 @@
 import json
-import pandas as pd
+import csv
 import math
 import heapq
 from datetime import datetime, timedelta
@@ -11,8 +11,13 @@ def load_json(file_path):
         return json.load(file)
 
 def load_csv(file_path):
-    return pd.read_csv(file_path)
-
+    data = []
+    with open(file_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            row['Date/Time'] = datetime.strptime(row['Date/Time'], '%m/%d/%Y %H:%M:%S')
+            data.append(row)
+    return data
 
 def construct_graph(adjacency_list):
     graph = {}
@@ -22,7 +27,6 @@ def construct_graph(adjacency_list):
             graph[start_node][end_node] = attributes
     return graph
 
-
 def find_nearest_node(lat1, lon1, node_data):
     nearest_node = None
     min_distance = float('inf')
@@ -31,10 +35,9 @@ def find_nearest_node(lat1, lon1, node_data):
     lon1 = math.radians(lon1)
 
     for node_id, coords in node_data.items():
-        lat2 = math.radians(coords['lat'])
-        lon2 = math.radians(coords['lon'])
+        lat2 = math.radians(float(coords['lat']))
+        lon2 = math.radians(float(coords['lon']))
 
-        # From https://www.geeksforgeeks.org/program-distance-two-points-earth/
         distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
         if distance < min_distance:
             min_distance = distance
@@ -42,8 +45,8 @@ def find_nearest_node(lat1, lon1, node_data):
 
     return nearest_node
 
-
 def calculate_route_time(start_node, end_node, graph, current_time):
+    # Returns time it takes to travel from start to end in hours
     distances = {node: float('infinity') for node in graph}
     distances[start_node] = 0
     pq = [(0, start_node)]
@@ -68,94 +71,101 @@ def calculate_route_time(start_node, end_node, graph, current_time):
 
     return float('infinity')
 
-def reinsert_driver(drivers, driver, available):
-    prob = 0.01 # Probability that driver is added back to available drivers
+def reinsert_driver(drivers, driver, available, new_loc):
+    prob = 0.95
     rand = random.random()
-    # = bool(random.getrandbits(1))
     if rand > prob: return drivers
-    index = -1
-    times = drivers['Date/Time'].tolist()
-    n = len(drivers)
-    l, r = 0, n-1
-    # using binary search 
-    while l <= r:
-        m = (l+r)//2
-        mid_time = times[m]
-        if mid_time == available:
-            index = m
+
+    left, right = 0, len(drivers) - 1
+    while left <= right:
+        mid = left + (right - left) // 2
+        if drivers[mid]['Date/Time'] == available:
+            left = mid
             break
-        elif mid_time < available:
-            l = m + 1
+        elif drivers[mid]['Date/Time'] < available:
+            left = mid + 1
         else:
-            r = m - 1
-            index = m
+            right = mid - 1
 
     driver['Date/Time'] = available
-    drivers = pd.concat([drivers.iloc[:l], pd.DataFrame([driver]), drivers.iloc[l:]]).reset_index(drop=True)
+    driver['Node'] = new_loc
+    drivers.insert(left, driver)
+
     return drivers
 
-def match_and_calculate_metrics(drivers, passengers, graph, node_data):
+def match_and_calculate_metrics(drivers, passengers, graph):
     wait_times = []
     profit_times = []
+    D1_times = []
 
-    while not drivers.empty and not passengers.empty:
-        driver = drivers.iloc[0]
-        passenger = passengers.iloc[0]
+    drivers.sort(key=lambda x: x['Date/Time'])
+    passengers.sort(key=lambda x: x['Date/Time'])
 
-        # Remove the matched driver and passenger from their respective queues
-        drivers = drivers.iloc[1:]
-        passengers = passengers.iloc[1:]
+    while drivers and passengers:
+        print(f'Remaining Passengers = {len(passengers)}')
+        driver = drivers.pop(0)
+        passenger = passengers.pop(0)
 
-        # Find the nearest nodes in the graph to the driver and passenger locations
-        driver_node = find_nearest_node(driver['Source Lat'], driver['Source Lon'], node_data)
-        passenger_pickup_node = find_nearest_node(passenger['Source Lat'], passenger['Source Lon'], node_data)
-        passenger_dropoff_node = find_nearest_node(passenger['Dest Lat'], passenger['Dest Lon'], node_data)
+        driver_node = driver['Node']
+        passenger_pickup_node = passenger['Source Node']
+        passenger_dropoff_node = passenger['Dest Node']
 
-        # Use the 'Date/Time' field from the driver's data as the current time
-        current_time = driver['Date/Time']
-        
-        # Calculate the time to passenger and time to destination
-        time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, current_time)
-        time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, current_time)
+        driver_time = driver['Date/Time']
+        passenger_time = passenger['Date/Time']
 
-        # Calculate wait time for the passenger and profit time for the driver
-        wait_time = time_to_passenger  # Time from driver's availability to passenger pickup
-        profit_time = time_to_destination - time_to_passenger  # Time driving the passenger minus time to reach them
+        match_time = max(driver_time, passenger_time)   # datetime object
 
+        match_wait_time = match_time - passenger_time   # datetime object
+        match_wait_hours = match_wait_time.total_seconds()/3600.0 # wait time in hours
 
-        available_time = current_time + timedelta(hours = (time_to_passenger + time_to_destination))
-        # Binary search driver times for time_to_destination to find where to reinsert driver
-        drivers = reinsert_driver(drivers, driver, available_time)
+        time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, match_time) # in hours
+        time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, match_time) # in hours
 
-        # Append calculated times to the respective lists
+        wait_time = match_wait_hours + time_to_passenger # in hours
+        profit_time = time_to_destination - time_to_passenger # in hours
+        D1 = wait_time + time_to_destination
+
+        available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
+        drivers = reinsert_driver(drivers, driver, available_time, passenger_dropoff_node)
+
         wait_times.append(wait_time)
         profit_times.append(profit_time)
+        D1_times.append(D1)
 
-    # Compute average wait and profit times
     average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
+    average_D1_time = sum(D1_times)/ len(D1_times) if D1_times else 0
+    return average_wait_time, average_profit_time, average_D1_time
 
-    return average_wait_time, average_profit_time
 #%%
+start = time.time()
 adjacency_list = load_json("adjacency.json")
 node_data = load_json("node_data.json")
 drivers_data = load_csv("drivers.csv")
 passengers_data = load_csv("passengers.csv")
+end = time.time()
+print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
+#%%
+start = time.time()
+for d in drivers_data:
+    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
+    d['Node'] = find_nearest_node(dlat, dlon, node_data)
 
-drivers_data['Date/Time'] = pd.to_datetime(drivers_data['Date/Time'])
-passengers_data['Date/Time'] = pd.to_datetime(passengers_data['Date/Time'])
-
-drivers_data.sort_values(by='Date/Time', inplace=True)
-passengers_data.sort_values(by='Date/Time', inplace=True)
-
+for p in passengers_data:
+    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
+    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
+    p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
+    p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
+end = time.time()
+print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
+#%%
 graph = construct_graph(adjacency_list)
-
 #%%
 start_time = time.time()
-average_wait_time, average_profit_time = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
+average_wait_time, average_profit_time, avg_D1 = match_and_calculate_metrics(drivers_data, passengers_data, graph)
 end_time = time.time()
 
-print("Average Wait Time for Passengers (D1):", average_wait_time, "minutes")
-print("Average Profit Time for Drivers (D2):", average_profit_time, "minutes")
-print(f"Runtime (excluding loading data): {end_time-start_time}")
-
+print(f"Average Wait Time for Passengers: {average_wait_time} hours")
+print(f'Average D1 Time: {avg_D1} hours')
+print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
+print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")

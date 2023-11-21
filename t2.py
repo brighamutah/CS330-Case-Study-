@@ -5,6 +5,7 @@ import heapq
 from datetime import datetime, timedelta
 import time
 import random
+import copy
 
 def load_json(file_path):
     with open(file_path, 'r') as file:
@@ -37,7 +38,7 @@ def find_nearest_node(lat1, lon1, node_data):
     for node_id, coords in node_data.items():
         lat2 = math.radians(float(coords['lat']))
         lon2 = math.radians(float(coords['lon']))
-
+        if lat1 == lat2 and lon1 == lon2: return node_id
         distance = 3963.0 * math.acos((math.sin(lat1) * math.sin(lat2)) + math.cos(lat1) * math.cos(lat2) * math.cos(lon2 - lon1))
         if distance < min_distance:
             min_distance = distance
@@ -59,6 +60,7 @@ def haversine(lat1, lon1, lat2, lon2):
     return distance
 
 def calculate_route_time(start_node, end_node, graph, current_time):
+    # Returns time it takes to travel from start to end in hours
     distances = {node: float('infinity') for node in graph}
     distances[start_node] = 0
     pq = [(0, start_node)]
@@ -83,8 +85,8 @@ def calculate_route_time(start_node, end_node, graph, current_time):
 
     return float('infinity')
 
-def reinsert_driver(drivers, driver, available):
-    prob = 0.01
+def reinsert_driver(drivers, driver, available, new_loc):
+    prob = 0.95
     rand = random.random()
     if rand > prob: return drivers
 
@@ -100,79 +102,109 @@ def reinsert_driver(drivers, driver, available):
             right = mid - 1
 
     driver['Date/Time'] = available
+    driver['Node'] = new_loc
     drivers.insert(left, driver)
 
     return drivers
 
-def match_and_calculate_metrics(drivers, passengers, graph, node_data):
+def match_and_calculate_metrics(drivers, passengers, graph, nodes):
     wait_times = []
     profit_times = []
-    total_distances = [] 
+    d1_times = []
+
+    drivers.sort(key=lambda x: x['Date/Time'])
+    passengers.sort(key=lambda x: x['Date/Time'])
 
     while drivers and passengers:
-        min_distance = float('inf')
-        selected_driver = None
-        selected_passenger = None
-        selected_index = None
+        print(f'Remaining Passengers = {len(passengers)}')
+        passenger = passengers.pop(0)
+        passenger_time = passenger['Date/Time']
+        passenger_pickup_node = passenger['Source Node']
+        passenger_dropoff_node = passenger['Dest Node']
 
-        for i, passenger in enumerate(passengers):
-            passenger_lat, passenger_lon = float(passenger['Source Lat']), float(passenger['Source Lon'])
+        source_lat, source_lon = float(nodes[passenger_pickup_node]['lat']), float(nodes[passenger_pickup_node]['lon'])
 
-            for driver in drivers:
-                driver_lat, driver_lon = float(driver['Source Lat']), float(driver['Source Lon'])
+        # BRUTE FORCE
+        driver = list(drivers)[0]
+        last_available_driver = 0
+        t = max(driver['Date/Time'], passenger_time)
 
-                distance = haversine(driver_lat, driver_lon, passenger_lat, passenger_lon)
+        i = 1
+        while driver['Date/Time'] <= passenger_time and i < len(drivers):
+            driver = list(drivers)[i]
+            last_available_driver = i
+            i+=1
 
-                if distance < min_distance:
-                    min_distance = distance
-                    selected_driver = driver
-                    selected_passenger = passenger
-                    selected_index = i
+        min_dist = float('infinity')
+        c_d_i = 0
+        if last_available_driver != 0:
+            for ind in range(last_available_driver):
+                d = list(drivers)[ind]
+                d_lat, d_lon = float(d['Source Lat']), float(d['Source Lon'])
+                dist = haversine(source_lat, source_lon, d_lat, d_lon)
+                if dist < min_dist:
+                    min_dist = dist
+                    c_d_i = ind
 
-        if selected_driver and selected_passenger:
-            drivers.remove(selected_driver)
-            passengers.pop(selected_index)
+        closest_driver = drivers.pop(c_d_i)
+        driver_node = closest_driver['Node']
+        driver_time = closest_driver['Date/Time']
 
-            driver_node = find_nearest_node(float(selected_driver['Source Lat']), float(selected_driver['Source Lon']), node_data)
-            passenger_pickup_node = find_nearest_node(float(selected_passenger['Source Lat']), float(selected_passenger['Source Lon']), node_data)
-            passenger_dropoff_node = find_nearest_node(float(selected_passenger['Dest Lat']), float(selected_passenger['Dest Lon']), node_data)
+        match_time = max(driver_time, passenger_time)   # datetime object
 
-            current_time = selected_driver['Date/Time']
-            
-            time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, current_time)
-            time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, current_time)
+        match_wait_time = match_time - passenger_time   # datetime object
+        match_wait_hours = match_wait_time.total_seconds()/3600.0 # wait time in hours
 
-            wait_time = time_to_passenger
-            profit_time = time_to_destination - time_to_passenger
+        time_to_passenger = calculate_route_time(driver_node, passenger_pickup_node, graph, match_time) # in hours
+        time_to_destination = calculate_route_time(passenger_pickup_node, passenger_dropoff_node, graph, match_time) # in hours
 
-            total_distance = min_distance 
+        wait_time = match_wait_hours + time_to_passenger # in hours
+        profit_time = time_to_destination - time_to_passenger # in hours
+        d1 = wait_time + time_to_destination
 
-            available_time = current_time + timedelta(hours=(time_to_passenger + time_to_destination))
-            drivers = reinsert_driver(drivers, selected_driver, available_time)
+        available_time = match_time + timedelta(hours=(time_to_passenger + time_to_destination)) # datetime object
+        drivers = reinsert_driver(drivers, closest_driver, available_time, passenger_dropoff_node)
 
-            wait_times.append(wait_time)
-            profit_times.append(profit_time)
-            total_distances.append(total_distance)
+        wait_times.append(wait_time)
+        profit_times.append(profit_time)
+        d1_times.append(d1)
 
     average_wait_time = sum(wait_times) / len(wait_times) if wait_times else 0
     average_profit_time = sum(profit_times) / len(profit_times) if profit_times else 0
-    average_total_distance = sum(total_distances) / len(total_distances) if total_distances else 0
+    average_d1_time = sum(d1_times) / len(d1_times) if d1_times else 0
 
-    return average_wait_time, average_profit_time, average_total_distance
+    return average_wait_time, average_profit_time, average_d1_time
 
-
+#%%
+start = time.time()
 adjacency_list = load_json("adjacency.json")
 node_data = load_json("node_data.json")
 drivers_data = load_csv("drivers.csv")
 passengers_data = load_csv("passengers.csv")
+end = time.time()
+print(f'Data Load Time: {(end - start)/60.0: .3f} minutes')
+#%%
+start = time.time()
+for d in drivers_data:
+    dlat, dlon = float(d['Source Lat']), float(d['Source Lon'])
+    d['Node'] = find_nearest_node(dlat, dlon, node_data)
 
+for p in passengers_data:
+    pslat, pslon = float(p['Source Lat']), float(p['Source Lon'])
+    pdlat, pdlon = float(p['Dest Lat']), float(p['Dest Lon'])
+    p['Source Node'] = find_nearest_node(pslat, pslon, node_data)
+    p['Dest Node'] = find_nearest_node(pdlat, pdlon, node_data)
+end = time.time()
+print(f'Finding Nearest Nodes of all Drivers/Passengers: {(end-start)/60.0: .3f} minutes')
+#%%
 graph = construct_graph(adjacency_list)
-
+#%%
 start_time = time.time()
-average_wait_time, average_profit_time, average_total_distance = match_and_calculate_metrics(drivers_data, passengers_data, graph, node_data)
+average_wait_time, average_profit_time, avg_d1 = match_and_calculate_metrics(copy.deepcopy(drivers_data), copy.deepcopy(passengers_data)[:100], graph, node_data)
 end_time = time.time()
 
-print("Average Wait Time for Passengers (D1):", average_wait_time, "minutes")
-print("Average Profit Time for Drivers (D2):", average_profit_time, "minutes")
-print("Average Total Distance (D3):", average_total_distance, "kilometers") 
-print(f"Runtime (excluding loading data): {end_time - start_time}")
+print(f"Average Wait Time for Passengers: {average_wait_time} hours")
+print(f'Average D1: {avg_d1} hours')
+print(f"Average Profit Time for Drivers (D2): {average_profit_time} hours")
+print(f"Runtime (excluding loading data): {(end_time - start_time)/60.0} minutes")
+

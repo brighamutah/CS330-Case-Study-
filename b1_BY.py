@@ -197,11 +197,11 @@ def k_centers_clustering(passengers_data, k):
         centers.append(coords[max_distance_index])
 
         for i, coord in enumerate(coords):
-            distances[i] = min(distances[i], haversine_distance(coord, centers[-1]))
+            distances[i] = min(distances[i], haversine(coord, centers[-1]))
 
     passenger_clusters = [[] for _ in range(k)]
     for i, coord in enumerate(coords):
-        cluster_index = min(range(k), key=lambda j: haversine_distance(coord, centers[j]))
+        cluster_index = min(range(k), key=lambda j: haversine(coord, centers[j]))
         passenger_clusters[cluster_index].append(passengers_data[i])
 
     return passenger_clusters
